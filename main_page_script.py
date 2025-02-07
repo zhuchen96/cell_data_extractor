@@ -444,12 +444,13 @@ def main():
         )
         # Change information showed when mouse on image
         fig_main.update_traces(
-            customdata=selected_slice,  # Store original values
+            customdata=selected_slice.astype(str),  # Store original values
             hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
         )
     else:
         fig_main = px.imshow(
             img_volume_data[z_index, :, :],
+            binary_string=True,
             color_continuous_scale='gray',
             #origin='upper',
             title=f"Slice Z={z_index}",
@@ -530,7 +531,7 @@ def main():
                     title="XY plane"
                 )
                 fig_xy.update_traces(
-                    customdata=xy_crop,  # Store original values
+                    customdata=xy_crop.astype(str),  # Store original values
                     hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
                 )
                 fig_xy.update_layout(
@@ -549,7 +550,7 @@ def main():
                     title="XZ plane"
                 )
                 fig_xz.update_traces(
-                    customdata=xz_crop,  # Store original values
+                    customdata=xz_crop.astype(str),  # Store original values
                     hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
                 )
                 fig_xz.update_layout(
@@ -568,7 +569,7 @@ def main():
                     title="YZ plane"
                 )
                 fig_yz.update_traces(
-                    customdata=yz_crop,  # Store original values
+                    customdata=yz_crop.astype(str),  # Store original values
                     hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
                 )
                 fig_yz.update_layout(
@@ -745,7 +746,7 @@ def main():
                             cell_mask_colored,
                         )
                         fig_neighbor.update_traces(
-                        customdata=cell_mask,  # Store original values
+                        customdata=cell_mask.astype(str),  # Store original values
                         hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
                         )
                     else:
@@ -824,7 +825,7 @@ def main():
                             fig_neighbor_connection = px.imshow(cell_neighbor_mask_colored)
 
                             fig_neighbor_connection.update_traces(
-                            customdata=cell_neighbor_mask,  # Store original values
+                            customdata=cell_neighbor_mask.astype(str),  # Store original values
                             hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
                             )
                         else:

@@ -21,8 +21,6 @@ def main(args):
             full_path = os.path.join(in_path, path)
             images.append(full_path)
     for i, img_path in enumerate(images):
-        if i >= 22:
-            continue
         image = extract(img_path)
         out_file_path = os.path.join(out_path, f"t{i:03d}")
         z = zarr.open(out_file_path, mode='w', shape=image.shape, chunks=(100, 100, 100), dtype=image.dtype)

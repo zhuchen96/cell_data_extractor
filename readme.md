@@ -41,9 +41,15 @@ Activate the environment:
 conda activate test
 ```
 
-### Step 4: Install Required Packages
+### Step 4: Clone the repository
+```sh
+git clone https://github.com/zhuchen96/cell_data_extractor.git
+cd cell_data_extractor
+```
 
-After activating the environment, install necessary dependencies:
+### Step 5: Install Required Packages
+
+Install necessary dependencies:
 
 ```sh
 pip install -r requirements.txt
@@ -63,7 +69,7 @@ cd cell_data_extractor
 
 ### Step 3: Execute preparation software (only needed for the first time)
 ```sh
-./preprocessing.sh
+./preprocessing_mem.sh
 ```
 
 ### Step 4: Run the user interface
