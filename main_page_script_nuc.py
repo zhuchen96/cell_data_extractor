@@ -628,11 +628,6 @@ def main():
 
             cellinfo_figure_list = [fig2, fig3, fig4, fig6, fig7, fig8]
 
-            neighbors_figure_list = []
-            current_cell_neighbors = neighbor_data[selected_key]
-            for current_neighbor, current_neighbor_info in current_cell_neighbors.items():
-                neighbors_figure_list.append(create_figure(current_neighbor_info["time"], current_time_frame, current_neighbor_info["size"], f"{selected_key} and {current_neighbor}", "Surface Area"))
-                
             if "click_dict_cellinfo" not in st.session_state:
                 st.session_state["click_dict_cellinfo"] = {}
             
