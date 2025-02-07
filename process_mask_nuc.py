@@ -198,24 +198,6 @@ def main(args):
     with open(os.path.join(out_json_path, "cell_information.json"), "w") as f:
         json.dump(results, f, indent=4)
 
-    connnections = {}
-    # Iterate through the first layer
-    for cell_id, time_frame_info in results.items():
-        connnections[str(cell_id)] = {}
-        for time_frame, tf_data in time_frame_info.items():
-            neighbors = tf_data["adjacency"]
-            if neighbors:
-                for neibgbor, size in neighbors.items():
-                    if int(neibgbor) not in connnections[str(cell_id)].keys():
-                        connnections[str(cell_id)][int(neibgbor)] = {}
-                        connnections[str(cell_id)][int(neibgbor)]['time'] = []
-                        connnections[str(cell_id)][int(neibgbor)]['size'] = []
-                    connnections[str(cell_id)][int(neibgbor)]['time'].append(int(time_frame))
-                    connnections[str(cell_id)][int(neibgbor)]['size'].append(int(size))
-
-    with open(os.path.join(out_json_path, "cell_connection_information.json"), "w") as f:
-        json.dump(connnections, f, indent=4)
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run tiff to zarr script for training.")

@@ -266,7 +266,7 @@ def main():
     with st.sidebar.expander("Select JSON file", expanded=False):
         json_folder_path = st.text_input(
             "Json file of cell information",
-            value="json_files",
+            value="json_files_nuc",
             help="Enter absolute/relative path."
         )
 
@@ -288,31 +288,19 @@ def main():
                 st.warning("No JSON files found in the specified folder. Please add files to the folder and reload the page.")
                 data = None  # Set data to None if no files are available
 
-            if json_files:
-                selected_neighbor_json_file = st.selectbox(
-                    "Select neighbor information JSON file", json_files, index=1
-                )
-                # Read the selected neighbor JSON file
-                neighbor_file_path = os.path.join(json_folder_path, selected_neighbor_json_file)
-                with open(neighbor_file_path, 'r') as f:
-                    neighbor_data = json.load(f)
-            else:
-                st.warning("No JSON files found in the specified folder. Please add files to the folder and reload the page.")
-                neighbor_data = None  # Set neighbor_data to None if no files are available
-
     # ---------------------------------------
     # Get mask file
     # ---------------------------------------
     with st.sidebar.expander("Select paths to masks and images", expanded=False):
         folder_path = st.text_input(
             "Folder containing segmentation masks:",
-            value="zarr_masks",
+            value="zarr_masks_nuc",
             help="Enter absolute/relative path."
         )
         
         img_path = st.text_input(
             "Folder containing raw images:",
-            value="zarr_images",
+            value="zarr_images_nuc",
             help="Enter absolute/relative path."
         )
 
