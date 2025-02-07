@@ -1,0 +1,8 @@
+numpy
+tifffile
+streamlit
+plotly
+streamlit-plotly-events
+matplotlib
+zarr
+argparse
