@@ -68,11 +68,21 @@ cd cell_data_extractor
 ```
 
 ### Step 3: Execute preparation software (only needed for the first time)
+When the data is already provided, please skip this step.
+Membrane channel:
 ```sh
 ./preprocessing_mem.sh
 ```
-
+Nuclei channel:
+```sh
+./preprocessing_nuc.sh
+```
 ### Step 4: Run the user interface
+Membrane channel:
 ```sh
 streamlit run main_page_script.py 
+```
+Nuclei channel:
+```sh
+streamlit run main_page_script_nuc.py 
 ```
