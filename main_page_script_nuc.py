@@ -8,11 +8,6 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt    
 import zarr
 
-def adjust_clicked_tf_neighbor(offset):
-    if "clicked_tf_neighbor" in st.session_state and st.session_state["clicked_tf_neighbor"] is not None:
-        st.session_state["clicked_tf_neighbor"] += offset
-        st.rerun()
-
 def adjust_clicked_tf_cellinfo(offset):
     if "clicked_tf_cellinfo" in st.session_state and st.session_state["clicked_tf_cellinfo"] is not None:
         st.session_state["clicked_tf_cellinfo"] += offset
@@ -184,42 +179,6 @@ def handle_click(clicked_tf_neighbor, selected_data, selected_key, mask_path, im
             st.write(f"Cell {selected_key} @ time {clicked_tf_neighbor}: {centroid}")
             st.session_state["clicked_mask"] = tmp_crop_mask
             st.session_state["clicked_image"] = tmp_crop_img
-        else:
-            st.write(f"No 'centroid' found for cell {selected_key} at time {time_str}")
-    else:
-        st.write(f"No data found for cell {selected_key} at time {time_str}")
-
-# Click on neighbor figures, show the corresponding cell in that time frame
-def handle_click_neighbor(clicked_tf_neighbor, selected_data, selected_key, mask_path, image_path, input_value):
-    time_str = str(clicked_tf_neighbor)
-
-    if time_str in selected_data:
-        centroid = selected_data[time_str].get("centroid", None)
-        if centroid:
-            centroid = [int(x) for x in centroid]
-            tmp_mask_path = os.path.join(mask_path, f"t{clicked_tf_neighbor:03d}")
-            tmp_img_path = os.path.join(image_path, f"t{clicked_tf_neighbor:03d}")
-
-            #tmp_file = imread(tmp_file_path)
-            tmp_mask_file = zarr.open(tmp_mask_path, mode='r')
-            tmp_img_file = zarr.open(tmp_img_path, mode='r')            
-            tmp_crop_mask = crop_3d_with_pad(
-                tmp_mask_file,
-                center_row=centroid[1],
-                center_col=centroid[2],
-                center_dep=centroid[0],
-                size=input_value
-            )
-            tmp_crop_img = crop_3d_with_pad(
-                tmp_img_file,
-                center_row=centroid[1],
-                center_col=centroid[2],
-                center_dep=centroid[0],
-                size=input_value
-            )
-            st.write(f"Cell {selected_key} @ time {clicked_tf_neighbor}: {centroid}")
-            st.session_state["clicked_mask_neighbor"] = tmp_crop_mask
-            st.session_state["clicked_image_neighbor"] = tmp_crop_img
         else:
             st.write(f"No 'centroid' found for cell {selected_key} at time {time_str}")
     else:
@@ -647,8 +606,6 @@ def main():
             max_lengths_z = []
             volumes = []
             movements = []
-            num_neighbors = []
-            changed_neighbors = []
             #connections = {}
 
             for tf_name, mask_data in selected_data.items():
@@ -663,8 +620,6 @@ def main():
                 max_lengths_z.append(mask_data.get("max_length_z", 0))
                 volumes.append(mask_data.get("volume", 0))
                 movements.append(mask_data.get("movement", 0))
-                num_neighbors.append(mask_data.get("num_neighbors", 0))
-                changed_neighbors.append(mask_data.get("changed_neighbors", 0))
 
             # Sort the data by time frame
             sorted_indices = sorted(range(len(time_frames)), key=lambda i: time_frames[i])
@@ -675,19 +630,15 @@ def main():
             max_lengths_z = [max_lengths_z[i] for i in sorted_indices]
             volumes = [volumes[i] for i in sorted_indices]
             movements = [movements[i] for i in sorted_indices]
-            num_neighbors = [num_neighbors[i] for i in sorted_indices]
-            changed_neighbors = [changed_neighbors[i] for i in sorted_indices]
 
-            fig1 = create_figure(time_frames, current_time_frame, num_neighbors, "Number of Neighbors", "Number of Neighbors")
             fig2 = create_figure(time_frames, current_time_frame, movements, "Movement", "Movement")
             fig3 = create_figure(time_frames, current_time_frame, surface_areas, "Surface Area", "Surface Area")
             fig4 = create_figure(time_frames, current_time_frame, volumes, "Volume", "Volume")
-            fig5 = create_figure(time_frames, current_time_frame, changed_neighbors, "Changed Neighbors", "Changed Neighbors")
             fig6 = create_figure(time_frames, current_time_frame, max_lengths_x, "Max Length X", "Max Length X")
             fig7 = create_figure(time_frames, current_time_frame, max_lengths_y, "Max Length Y", "Max Length Y")
             fig8 = create_figure(time_frames, current_time_frame, max_lengths_z, "Max Length Z", "Max Length Z")
 
-            cellinfo_figure_list = [fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8]
+            cellinfo_figure_list = [fig2, fig3, fig4, fig6, fig7, fig8]
 
             neighbors_figure_list = []
             current_cell_neighbors = neighbor_data[selected_key]
@@ -770,89 +721,7 @@ def main():
                      
                     with col3:
                         if st.button("→", key="next_button"):
-                            adjust_clicked_tf_cellinfo(1)
-
-            # ---------------------------------------
-            # Display neighbor information
-            # ---------------------------------------
-            cols_per_row = 3  
-            # Dictionary to save last click information for each image
-            if "click_dict_neighbor" not in st.session_state:
-                st.session_state["click_dict_neighbor"] = {}
-
-            with st.expander("Show neighbor information"):
-                # Dynamically create columns based on the figure count
-                num_figs = len(neighbors_figure_list)
-                rows = (num_figs + cols_per_row - 1) // cols_per_row  # Compute needed rows
-                if "clicked_tf_neighbor" not in st.session_state:
-                    st.session_state["clicked_tf_neighbor"] = None
-                for i in range(rows):
-                    cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))  # Adjust for last row
-                    for j, col in enumerate(cols):
-                        idx = i * cols_per_row + j
-                        if idx < num_figs:
-                            with col:
-                                # Plot figure and allow click
-                                clicked_fig = plotly_events(
-                                    neighbors_figure_list[idx], 
-                                    click_event=True, 
-                                    override_width="100%", 
-                                    override_height=400
-                                )
-                            if clicked_fig:
-                                # Get click, if it's the first click of a figure, generate a new element
-                                if idx not in st.session_state["click_dict_neighbor"].keys():
-                                    st.session_state["click_dict_neighbor"][idx] = clicked_fig
-                                    # Get the clicked time frame 
-                                    st.session_state["clicked_tf_neighbor"] = clicked_fig[0]['x']
-                                else:
-                                    # Check if the current click is the same as last click
-                                    if st.session_state["click_dict_neighbor"][idx] != clicked_fig:
-                                        # Get clicked time frame if the current click is different (it's a real click)
-                                        st.session_state["clicked_tf_neighbor"] = clicked_fig[0]['x']
-                                        st.session_state["click_dict_neighbor"][idx] = clicked_fig
-                                    else:
-                                        pass
-                if st.session_state["clicked_tf_neighbor"] is not None:
-                    handle_click_neighbor(st.session_state["clicked_tf_neighbor"], selected_data, selected_key, folder_path, img_path, input_value)
-                                        
-                    z_index_cellinfo = st.slider(
-                        "Select Z slice",
-                        min_value=0,
-                        max_value=input_value//2 - 1,
-                        value= input_value//4,
-                        key="cell_neighbor_slider"
-                    )
-                    if st.session_state.is_mask: 
-                        cell_neighbor_mask = st.session_state["clicked_mask_neighbor"][z_index_cellinfo, :, :]
-                        cell_neighbor_mask_colored = encode_masks_to_rgb(cell_neighbor_mask, distinct_colormap)
-                    else:
-                        cell_neighbor_img = st.session_state["clicked_image_neighbor"][z_index_cellinfo, :, :]
-
-                    col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
-                    
-                    with col1:
-                        if st.button("←", key="prev_button_neighbor"):
-                            adjust_clicked_tf_neighbor(-1)
-                    
-                    with col2:
-                        if st.session_state.is_mask:
-                            fig_neighbor_connection = px.imshow(cell_neighbor_mask_colored)
-
-                            fig_neighbor_connection.update_traces(
-                            customdata=cell_neighbor_mask.astype(str),  # Store original values
-                            hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
-                            )
-                        else:
-                            fig_neighbor_connection = px.imshow(cell_neighbor_img, binary_string=True)
-                        
-
-                        st.plotly_chart(fig_neighbor_connection, key="neighbor_connection_fig")
-                    
-                    with col3:
-                        if st.button("→", key="next_button_neighbor"):
-                            adjust_clicked_tf_neighbor(1)
-
+                            adjust_clicked_tf_cellinfo(1)  
 
         else:
             st.warning("Clicked outside the data range.")

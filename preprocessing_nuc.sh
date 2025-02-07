@@ -5,7 +5,7 @@ set -e
 
 # Prompt user for input path
 read -p "Enter the path containing mask files (TIFF): " INPUT_MASK_PATH
-read -p "Enter the path containing membrane image files (TIFF): " INPUT_IMG_PATH
+read -p "Enter the path containing nuclei image files (TIFF): " INPUT_IMG_PATH
 # Define output path
 OUTPUT_MASK_PATH="$(pwd)/zarr_masks_nuc"
 OUTPUT_IMG_PATH="$(pwd)/zarr_images_nuc"
