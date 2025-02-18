@@ -4,3 +4,4 @@ zarr_images/
 zarr_masks/
 zarr_masks_nuc/
 zarr_images_nuc/
+zarr*/

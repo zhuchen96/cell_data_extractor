@@ -7,3 +7,4 @@ matplotlib
 zarr
 argparse
 imagecodecs
+scikit-image

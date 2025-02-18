@@ -7,6 +7,19 @@ from streamlit_plotly_events import plotly_events
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt    
 import zarr
+from skimage import exposure
+
+def gamma_correction(image, gamma=0.00001):
+    # Normalize image to [0,1]
+    norm_image = image / image.max()
+    # Apply gamma correction
+    gamma_corrected = np.power(norm_image, gamma)
+    # Scale back to original range if necessary
+    return gamma_corrected
+
+def contrast_stretch(image):
+    image = exposure.equalize_adapthist(image, clip_limit=0.02)
+    return image
 
 def adjust_clicked_tf_cellinfo(offset):
     if "clicked_tf_cellinfo" in st.session_state and st.session_state["clicked_tf_cellinfo"] is not None:
@@ -55,7 +68,7 @@ def crop_3d_with_pad(
         sub_img,
         pad_width=((pad_front, pad_back), (pad_top, pad_bottom), (pad_left, pad_right)),
         mode='constant',
-        constant_values=0
+        constant_values=np.min(image_3d)
     )
 
     return sub_img_padded
@@ -96,7 +109,7 @@ def crop_2d_with_pad(
         sub_img,
         pad_width=((pad_top, pad_bottom), (pad_left, pad_right)),
         mode='constant',
-        constant_values=0
+        constant_values=np.min(image_2d)
     )
 
     return sub_img_padded
@@ -401,7 +414,7 @@ def main():
         )
     else:
         fig_main = px.imshow(
-            img_volume_data[z_index, :, :],
+            contrast_stretch(img_volume_data[z_index, :, :]),
             binary_string=True,
             color_continuous_scale='gray',
             #origin='upper',
@@ -533,7 +546,7 @@ def main():
                 col3.plotly_chart(fig_yz, use_container_width=False)
             else:
                 fig_xy = px.imshow(
-                    xy_crop,
+                    contrast_stretch(xy_crop),
                     color_continuous_scale='gray',
                     origin='upper',
                     title="XY plane (z fixed)"
@@ -547,7 +560,7 @@ def main():
                 col1.plotly_chart(fig_xy, use_container_width=False)
 
                 fig_xz = px.imshow(
-                    xz_crop,
+                    contrast_stretch(xz_crop),
                     color_continuous_scale='gray',
                     origin='upper',
                     title="XZ plane (y fixed)"
@@ -561,7 +574,7 @@ def main():
                 col2.plotly_chart(fig_xz, use_container_width=False)
 
                 fig_yz = px.imshow(
-                    yz_crop,
+                    contrast_stretch(yz_crop),
                     color_continuous_scale='gray',
                     origin='upper',
                     title="YZ plane (x fixed)"
@@ -696,7 +709,7 @@ def main():
                             )
                         else:
                             fig_neighbor = px.imshow(
-                                cell_img,
+                                contrast_stretch(cell_img),
                                 binary_string=True
                             )                                        
 
