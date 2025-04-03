@@ -26,6 +26,11 @@ def adjust_clicked_tf_cellinfo(offset):
         st.session_state["clicked_tf_cellinfo"] += offset
         st.rerun()
 
+def adjust_clicked_tf_msrd(offset):
+    if "clicked_tf_msrd" in st.session_state and st.session_state["clicked_tf_msrd"] is not None:
+        st.session_state["clicked_tf_msrd"] += offset
+        st.rerun()
+
 def crop_3d_with_pad(
     image_3d,
     center_row: int,
@@ -239,6 +244,54 @@ def create_figure(time_frames, current_time_frame, y_values, title, y_label):
     
     return fig
 
+def handle_click_msrd(clicked_tf_msrd, selected_data, selected_key, clicked_neighbor, mask_path, image_path, input_value):
+    time_str = str(clicked_tf_msrd)
+
+    if time_str in selected_data:
+        centroid = selected_data[time_str].get("centroid", None)
+        if centroid:
+            centroid = [int(x) for x in centroid]
+            tmp_mask_path = os.path.join(mask_path, f"t{clicked_tf_msrd:03d}")
+            tmp_img_path = os.path.join(image_path, f"t{clicked_tf_msrd:03d}")
+
+            #tmp_file = imread(tmp_file_path)
+            tmp_mask_file = zarr.open(tmp_mask_path, mode='r')
+            tmp_img_file = zarr.open(tmp_img_path, mode='r')
+            tmp_mask_file = tmp_mask_file[:] 
+            '''            
+            tmp_crop_mask = crop_3d_with_pad(
+                tmp_mask_file,
+                center_row=centroid[1],
+                center_col=centroid[2],
+                center_dep=centroid[0],
+                size=input_value
+            )
+            tmp_crop_img = crop_3d_with_pad(
+                tmp_img_file,
+                center_row=centroid[1],
+                center_col=centroid[2],
+                center_dep=centroid[0],
+                size=input_value
+            )
+            '''
+
+            coords = np.argwhere((tmp_mask_file == int(selected_key)) | (tmp_mask_file == int(clicked_neighbor)))
+
+            z_min, y_min, x_min = coords.min(axis=0)
+            z_max, y_max, x_max = coords.max(axis=0) + 1  # +1 because slicing is exclusive on the upper bound
+
+            # Crop
+            tmp_crop_mask = tmp_mask_file[z_min:z_max, y_min:y_max, x_min:x_max]
+            tmp_crop_img = tmp_img_file[z_min:z_max, y_min:y_max, x_min:x_max]
+
+            st.write(f"MSRD between cell {selected_key} and cell {clicked_neighbor}")
+            st.session_state["clicked_mask_msrd"] = tmp_crop_mask
+            st.session_state["clicked_image_msrd"] = tmp_crop_img
+        else:
+            st.write(f"No 'centroid' found for cell {selected_key} at time {time_str}")
+    else:
+        st.write(f"No data found for cell {selected_key} at time {time_str}")
+
 def main():
 
     # Generate colormap for masks
@@ -260,12 +313,12 @@ def main():
         st.session_state["clicked_image"] = None
 
 
-    if "clicked_mask_colored_neighbor" not in st.session_state:
-        st.session_state["clicked_mask_colored_neighbor"] = None
-    if "clicked_mask_neighbor" not in st.session_state:
-        st.session_state["clicked_mask_neighbor"] = None
-    if "clicked_image_neighbor" not in st.session_state:
-        st.session_state["clicked_image_neighbor"] = None
+    if "clicked_mask_colored_msrd" not in st.session_state:
+        st.session_state["clicked_mask_colored_msrd"] = None
+    if "clicked_mask_msrd" not in st.session_state:
+        st.session_state["clicked_mask_msrd"] = None
+    if "clicked_image_msrdr" not in st.session_state:
+        st.session_state["clicked_image_msrd"] = None
 
     # Initialize session state of last clicked time frame
     if "last_clicked" not in st.session_state:
@@ -296,7 +349,9 @@ def main():
                 # Read the selected JSON file
                 file_path = os.path.join(json_folder_path, selected_json_file)
                 with open(file_path, 'r') as f:
-                    data = json.load(f)
+                    data_load = json.load(f)
+                data = data_load["cell_information"]
+                msrd_data = data_load["neighbor_centroid_distances"]
             else:
                 st.warning("No JSON files found in the specified folder. Please add files to the folder and reload the page.")
                 data = None  # Set data to None if no files are available
@@ -718,6 +773,102 @@ def main():
                     with col3:
                         if st.button("→", key="next_button"):
                             adjust_clicked_tf_cellinfo(1)  
+
+            # -------------------------------------------------Show MSRD Information------------------------------------------------------------
+            if "click_dict_msrd" not in st.session_state:
+                st.session_state["click_dict_msrd"] = {}
+
+            with st.expander("Show MSRD information"):
+                if selected_key not in msrd_data:
+                    st.warning(f"No data found in the JSON for cell ID = {selected_key}")
+                    return
+
+                msrd_figure_list = []
+                msrd_index_list = []
+
+                for neighbor_id, dist_list in msrd_data[selected_key].items():
+                    distances = [(d-dist_list[0])**2/25**2 if d is not None else float('nan') for d in dist_list]
+                    msrd_figure_list.append(
+                        create_figure(time_frames, current_time_frame, distances, 
+                                    f"MSRD {selected_key} - {neighbor_id}", 
+                                    f"MSRD {selected_key} - {neighbor_id}")
+                    )
+                    msrd_index_list.append(neighbor_id)
+
+                num_figs = len(msrd_index_list)
+                rows = (num_figs + cols_per_row - 1) // cols_per_row
+
+                # Session state initialization
+                if "clicked_tf_msrd" not in st.session_state:
+                    st.session_state["clicked_tf_msrd"] = None
+                if "clicked_neighbor" not in st.session_state:
+                    st.session_state["clicked_neighbor"] = 0
+                if "click_dict_msrd" not in st.session_state:
+                    st.session_state["click_dict_msrd"] = {}
+
+                # Display each row under a toggle (checkbox)
+                for i in range(rows):
+                    show_row = st.checkbox(f"Show Row {i+1}", value=True)
+                    if show_row:
+                        cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))
+                        for j, col in enumerate(cols):
+                            idx = i * cols_per_row + j
+                            if idx < num_figs:
+                                with col:
+                                    clicked_fig_msrd = plotly_events(
+                                        msrd_figure_list[idx], 
+                                        click_event=True, 
+                                        override_width="100%", 
+                                        override_height=400
+                                    )
+
+                                if clicked_fig_msrd:
+                                    prev_click = st.session_state["click_dict_msrd"].get(idx)
+                                    if prev_click != clicked_fig_msrd:
+                                        st.session_state["click_dict_msrd"][idx] = clicked_fig_msrd
+                                        st.session_state["clicked_tf_msrd"] = clicked_fig_msrd[0]['x']
+                                        st.session_state["clicked_neighbor"] = msrd_index_list[idx]
+
+                if st.session_state["clicked_tf_msrd"] is not None:
+                    handle_click_msrd(st.session_state["clicked_tf_msrd"], selected_data, selected_key, st.session_state["clicked_neighbor"], folder_path, img_path, input_value)
+                                        
+                    z_index_cellinfo = st.slider(
+                        "Select Z slice",
+                        min_value=0,
+                        max_value=st.session_state["clicked_mask_msrd"].shape[0] - 1,
+                        value= input_value//4,
+                        key="cell_neighbor_slider"
+                    )
+                    if st.session_state.is_mask: 
+                        cell_neighbor_mask = st.session_state["clicked_mask_msrd"][z_index_cellinfo, :, :]
+                        cell_neighbor_mask_colored = encode_masks_to_rgb(cell_neighbor_mask, distinct_colormap)
+                    else:
+                        cell_neighbor_img = st.session_state["clicked_image_msrd"][z_index_cellinfo, :, :]
+
+                    col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
+                    
+                    with col1:
+                        if st.button("←", key="prev_button_msrd"):
+                            adjust_clicked_tf_msrd(-1)
+                    
+                    with col2:
+                        if st.session_state.is_mask:
+                            fig_neighbor_connection = px.imshow(cell_neighbor_mask_colored)
+
+                            fig_neighbor_connection.update_traces(
+                            customdata=cell_neighbor_mask.astype(str),  # Store original values
+                            hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
+                            )
+                        else:
+                            fig_neighbor_connection = px.imshow(contrast_stretch(cell_neighbor_img), binary_string=True)
+                        
+
+                        st.plotly_chart(fig_neighbor_connection, key="_msrd_connection_fig")
+                    
+                    with col3:
+                        if st.button("→", key="next_button_msrd"):
+                            adjust_clicked_tf_msrd(1)
+
 
         else:
             st.warning("Clicked outside the data range.")
