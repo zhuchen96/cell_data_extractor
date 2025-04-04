@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt    
 import zarr
 from skimage import exposure
+import re
 
 def gamma_correction(image, gamma=0.00001):
     # Normalize image to [0,1]
@@ -393,11 +394,12 @@ def main():
 
     # Get tiff files
     tif_files = sorted(
-        [f for f in os.listdir(folder_path)]
+        [f for f in os.listdir(folder_path)
+        if os.path.isdir(os.path.join(folder_path, f)) and re.match(r"^t\d{3}$", f)]
     )
-
     img_files = sorted(
-        [f for f in os.listdir(img_path)]
+        [f for f in os.listdir(img_path)
+        if os.path.isdir(os.path.join(img_path, f)) and re.match(r"^t\d{3}$", f)]
     )
 
     if not tif_files:
