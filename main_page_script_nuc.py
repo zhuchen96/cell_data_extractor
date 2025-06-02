@@ -38,7 +38,7 @@ def crop_3d_with_pad(
     center_col: int,
     center_dep: int,
     size: int = 64
-) -> np.ndarray:
+    ):
     """
     Crop a 2D image around (center_row, center_col) to (size, size).
     If out of bounds, zero-pad to ensure final shape is (size, size).
@@ -259,22 +259,6 @@ def handle_click_msrd(clicked_tf_msrd, selected_data, selected_key, clicked_neig
             tmp_mask_file = zarr.open(tmp_mask_path, mode='r')
             tmp_img_file = zarr.open(tmp_img_path, mode='r')
             tmp_mask_file = tmp_mask_file[:] 
-            '''            
-            tmp_crop_mask = crop_3d_with_pad(
-                tmp_mask_file,
-                center_row=centroid[1],
-                center_col=centroid[2],
-                center_dep=centroid[0],
-                size=input_value
-            )
-            tmp_crop_img = crop_3d_with_pad(
-                tmp_img_file,
-                center_row=centroid[1],
-                center_col=centroid[2],
-                center_dep=centroid[0],
-                size=input_value
-            )
-            '''
 
             coords = np.argwhere((tmp_mask_file == int(selected_key)) | (tmp_mask_file == int(clicked_neighbor)))
 
@@ -305,7 +289,7 @@ def main():
         initial_sidebar_state='collapsed'
     )
 
-    # Initialize session state for the "click image"
+    # Initialize session state for the "click image" in general information
     if "clicked_mask_colored" not in st.session_state:
         st.session_state["clicked_mask_colored"] = None
     if "clicked_mask" not in st.session_state:
@@ -313,7 +297,7 @@ def main():
     if "clicked_image" not in st.session_state:
         st.session_state["clicked_image"] = None
 
-
+    # Initialize session state for the "click image" in msrd
     if "clicked_mask_colored_msrd" not in st.session_state:
         st.session_state["clicked_mask_colored_msrd"] = None
     if "clicked_mask_msrd" not in st.session_state:
@@ -327,13 +311,14 @@ def main():
     # Initialize mask / image display mode
     if "is_mask" not in st.session_state:
         st.session_state.is_mask = True
+
     # ---------------------------------------
     # Get json file
     # ---------------------------------------
     with st.sidebar.expander("Select JSON file", expanded=False):
         json_folder_path = st.text_input(
             "Json file of cell information",
-            value="json_files_nuc",
+            value="json_file_4",
             help="Enter absolute/relative path."
         )
 
@@ -363,13 +348,13 @@ def main():
     with st.sidebar.expander("Select paths to masks and images", expanded=False):
         folder_path = st.text_input(
             "Folder containing segmentation masks:",
-            value="zarr_masks_nuc",
+            value="zarr_masks_nuc_4",
             help="Enter absolute/relative path."
         )
         
         img_path = st.text_input(
             "Folder containing raw images:",
-            value="zarr_images_nuc",
+            value="zarr_images_nuc_4",
             help="Enter absolute/relative path."
         )
 
@@ -392,7 +377,7 @@ def main():
             on_click=toggle_image
         )
 
-    # Get tiff files
+    # Get zarr files
     tif_files = sorted(
         [f for f in os.listdir(folder_path)
         if os.path.isdir(os.path.join(folder_path, f)) and re.match(r"^t\d{3}$", f)]
@@ -403,11 +388,11 @@ def main():
     )
 
     if not tif_files:
-        st.warning("No .tif files found in the specified folder.")
+        st.warning("No zarr files found in the specified folder.")
         return
 
     if not img_files:
-        st.warning("No .tif files found in the specified folder.")
+        st.warning("No zarr files found in the specified folder.")
         return
 
     # ---------------------------------------
@@ -416,14 +401,19 @@ def main():
     col1, col2 = st.columns([2, 8])  # Adjust column width ratio if needed
 
     # Time frame selection
-    with col1:
-        selected_file = st.selectbox("Select time frame", tif_files)
+    t_index = st.slider(
+        "Select time point",
+        min_value=0,
+        max_value=len(tif_files)-1,
+        value=0
+    )
+    #selected_file = st.selectbox("Select time frame", tif_files)
 
-    file_path = os.path.join(folder_path, selected_file)
+    file_path = os.path.join(folder_path, f"t{t_index:03d}")
 
     #st.write(f"Reading file: `{selected_file}` ...")
 
-    current_time_frame = int(selected_file[1:4])  # Assumes consistent filename format
+    current_time_frame = int(t_index)  # Assumes consistent filename format
 
     selected_img_path = os.path.join(img_path, img_files[current_time_frame])
 
@@ -437,13 +427,12 @@ def main():
     z_size, height_y, width_x = volume_data.shape
 
     # Get the z slice in image
-    with col2:
-        z_index = st.slider(
-            "Select Z slice",
-            min_value=0,
-            max_value=z_size - 1,
-            value=0
-        )
+    z_index = st.slider(
+        "Select Z slice",
+        min_value=0,
+        max_value=z_size - 1,
+        value=0
+    )
 
     # ---------------------------------------
     # Main visualization window
@@ -647,235 +636,232 @@ def main():
     # ---------------------------------------
     # Display the cell information
     # ---------------------------------------
-    if selected_file:
-        if pixel_val != 0:
-            # Convert int to string for JSON lookup
-            selected_key = str(int(pixel_val))
-            if selected_key not in data:
+    if pixel_val != 0:
+        # Convert int to string for JSON lookup
+        selected_key = str(int(pixel_val))
+        if selected_key not in data:
+            st.warning(f"No data found in the JSON for cell ID = {selected_key}")
+            return
+        selected_data = data[selected_key]
+
+        # Extract time frame indices and corresponding data
+        time_frames = []
+        surface_areas = []
+        max_lengths_x = []
+        max_lengths_y = []
+        max_lengths_z = []
+        volumes = []
+        movements = []
+        #connections = {}
+
+        for tf_name, mask_data in selected_data.items():
+            # Extract the time frame index from the filename
+            time_frame = int(tf_name)
+            time_frames.append(time_frame)
+
+            # Extract the required values
+            surface_areas.append(mask_data.get("surface_area", 0))
+            max_lengths_x.append(mask_data.get("max_length_x", 0))
+            max_lengths_y.append(mask_data.get("max_length_y", 0))
+            max_lengths_z.append(mask_data.get("max_length_z", 0))
+            volumes.append(mask_data.get("volume", 0))
+            movements.append(mask_data.get("movement", 0))
+
+        # Sort the data by time frame
+        sorted_indices = sorted(range(len(time_frames)), key=lambda i: time_frames[i])
+        time_frames = [time_frames[i] for i in sorted_indices]
+        surface_areas = [surface_areas[i] for i in sorted_indices]
+        max_lengths_x = [max_lengths_x[i] for i in sorted_indices]
+        max_lengths_y = [max_lengths_y[i] for i in sorted_indices]
+        max_lengths_z = [max_lengths_z[i] for i in sorted_indices]
+        volumes = [volumes[i] for i in sorted_indices]
+        movements = [movements[i] for i in sorted_indices]
+
+        fig2 = create_figure(time_frames, current_time_frame, movements, "Movement", "Movement")
+        fig3 = create_figure(time_frames, current_time_frame, surface_areas, "Surface Area", "Surface Area")
+        fig4 = create_figure(time_frames, current_time_frame, volumes, "Volume", "Volume")
+        fig6 = create_figure(time_frames, current_time_frame, max_lengths_x, "Max Length X", "Max Length X")
+        fig7 = create_figure(time_frames, current_time_frame, max_lengths_y, "Max Length Y", "Max Length Y")
+        fig8 = create_figure(time_frames, current_time_frame, max_lengths_z, "Max Length Z", "Max Length Z")
+
+        cellinfo_figure_list = [fig2, fig3, fig4, fig6, fig7, fig8]
+
+        if "click_dict_cellinfo" not in st.session_state:
+            st.session_state["click_dict_cellinfo"] = {}
+        
+        cols_per_row = 3
+        with st.expander("Show more information"):
+            num_figs = len(cellinfo_figure_list)
+            rows = (num_figs + cols_per_row - 1) // cols_per_row  # Compute needed rows
+            if "clicked_tf_cellinfo" not in st.session_state:
+                st.session_state["clicked_tf_cellinfo"] = None
+            for i in range(rows):
+                cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))  # Adjust for last row
+                for j, col in enumerate(cols):
+                    idx = i * cols_per_row + j
+                    if idx < num_figs:
+                        with col:
+                            # Plot figure and allow click
+                            clicked_cellinfo_fig = plotly_events(
+                                cellinfo_figure_list[idx], 
+                                click_event=True, 
+                                override_width="100%", 
+                                override_height=400
+                            )
+                        if clicked_cellinfo_fig:
+                            # Get click, if it's the first click of a figure, generate a new element
+                            if idx not in st.session_state["click_dict_cellinfo"].keys():
+                                st.session_state["click_dict_cellinfo"][idx] = clicked_cellinfo_fig
+                                # Get the clicked time frame 
+                                st.session_state["clicked_tf_cellinfo"] = clicked_cellinfo_fig[0]['x']
+                            else:
+                                # Check if the current click is the same as last click
+                                if st.session_state["click_dict_cellinfo"][idx] != clicked_cellinfo_fig:
+                                    # Get clicked time frame if the current click is different (it's a real click)
+                                    st.session_state["clicked_tf_cellinfo"] = clicked_cellinfo_fig[0]['x']
+                                    st.session_state["click_dict_cellinfo"][idx] = clicked_cellinfo_fig
+                                else:
+                                    pass
+            if st.session_state["clicked_tf_cellinfo"] is not None:
+                handle_click(st.session_state["clicked_tf_cellinfo"], selected_data, selected_key, folder_path, img_path, input_value)
+                                    
+                z_index_cellinfo = st.slider(
+                    "Select Z slice",
+                    min_value=0,
+                    max_value=input_value//2 - 1,
+                    value= input_value//4,
+                    key="cell_info_slider"
+                )
+                if st.session_state.is_mask: 
+                    cell_mask = st.session_state["clicked_mask"][z_index_cellinfo, :, :]
+                    cell_mask_colored = encode_masks_to_rgb(cell_mask, distinct_colormap)
+                else:
+                    cell_img = st.session_state["clicked_image"][z_index_cellinfo, :, :]
+
+                col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
+                
+                with col1:
+                    if st.button("←", key="prev_button"):
+                        adjust_clicked_tf_cellinfo(-1)
+                with col2:
+                    if st.session_state.is_mask: 
+                        fig_neighbor = px.imshow(
+                            cell_mask_colored,
+                        )
+                        fig_neighbor.update_traces(
+                        customdata=cell_mask.astype(str),  # Store original values
+                        hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
+                        )
+                    else:
+                        fig_neighbor = px.imshow(
+                            contrast_stretch(cell_img),
+                            binary_string=True
+                        )                                        
+
+                    st.plotly_chart(fig_neighbor, key="neighbor_fig")        
+                    
+                with col3:
+                    if st.button("→", key="next_button"):
+                        adjust_clicked_tf_cellinfo(1)  
+
+        # -------------------------------------------------Show MSRD Information------------------------------------------------------------
+        if "click_dict_msrd" not in st.session_state:
+            st.session_state["click_dict_msrd"] = {}
+
+        with st.expander("Show MSRD information"):
+            if selected_key not in msrd_data:
                 st.warning(f"No data found in the JSON for cell ID = {selected_key}")
                 return
-            selected_data = data[selected_key]
 
-            # Extract time frame indices and corresponding data
-            time_frames = []
-            surface_areas = []
-            max_lengths_x = []
-            max_lengths_y = []
-            max_lengths_z = []
-            volumes = []
-            movements = []
-            #connections = {}
+            msrd_figure_list = []
+            msrd_index_list = []
 
-            for tf_name, mask_data in selected_data.items():
-                # Extract the time frame index from the filename
-                time_frame = int(tf_name)
-                time_frames.append(time_frame)
+            for neighbor_id, dist_list in msrd_data[selected_key].items():
+                distances = [(d-dist_list[0])**2/25**2 if d is not None else float('nan') for d in dist_list]
+                msrd_figure_list.append(
+                    create_figure(time_frames, current_time_frame, distances, 
+                                f"MSRD {selected_key} - {neighbor_id}", 
+                                f"MSRD {selected_key} - {neighbor_id}")
+                )
+                msrd_index_list.append(neighbor_id)
 
-                # Extract the required values
-                surface_areas.append(mask_data.get("surface_area", 0))
-                max_lengths_x.append(mask_data.get("max_length_x", 0))
-                max_lengths_y.append(mask_data.get("max_length_y", 0))
-                max_lengths_z.append(mask_data.get("max_length_z", 0))
-                volumes.append(mask_data.get("volume", 0))
-                movements.append(mask_data.get("movement", 0))
+            num_figs = len(msrd_index_list)
+            rows = (num_figs + cols_per_row - 1) // cols_per_row
 
-            # Sort the data by time frame
-            sorted_indices = sorted(range(len(time_frames)), key=lambda i: time_frames[i])
-            time_frames = [time_frames[i] for i in sorted_indices]
-            surface_areas = [surface_areas[i] for i in sorted_indices]
-            max_lengths_x = [max_lengths_x[i] for i in sorted_indices]
-            max_lengths_y = [max_lengths_y[i] for i in sorted_indices]
-            max_lengths_z = [max_lengths_z[i] for i in sorted_indices]
-            volumes = [volumes[i] for i in sorted_indices]
-            movements = [movements[i] for i in sorted_indices]
+            # Session state initialization
+            if "clicked_tf_msrd" not in st.session_state:
+                st.session_state["clicked_tf_msrd"] = None
+            if "clicked_neighbor" not in st.session_state:
+                st.session_state["clicked_neighbor"] = 0
+            if "click_dict_msrd" not in st.session_state:
+                st.session_state["click_dict_msrd"] = {}
 
-            fig2 = create_figure(time_frames, current_time_frame, movements, "Movement", "Movement")
-            fig3 = create_figure(time_frames, current_time_frame, surface_areas, "Surface Area", "Surface Area")
-            fig4 = create_figure(time_frames, current_time_frame, volumes, "Volume", "Volume")
-            fig6 = create_figure(time_frames, current_time_frame, max_lengths_x, "Max Length X", "Max Length X")
-            fig7 = create_figure(time_frames, current_time_frame, max_lengths_y, "Max Length Y", "Max Length Y")
-            fig8 = create_figure(time_frames, current_time_frame, max_lengths_z, "Max Length Z", "Max Length Z")
-
-            cellinfo_figure_list = [fig2, fig3, fig4, fig6, fig7, fig8]
-
-            if "click_dict_cellinfo" not in st.session_state:
-                st.session_state["click_dict_cellinfo"] = {}
-            
-            cols_per_row = 3
-            with st.expander("Show more information"):
-                num_figs = len(cellinfo_figure_list)
-                rows = (num_figs + cols_per_row - 1) // cols_per_row  # Compute needed rows
-                if "clicked_tf_cellinfo" not in st.session_state:
-                    st.session_state["clicked_tf_cellinfo"] = None
-                for i in range(rows):
-                    cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))  # Adjust for last row
+            # Display each row under a toggle (checkbox)
+            for i in range(rows):
+                show_row = st.checkbox(f"Show Row {i+1}", value=True)
+                if show_row:
+                    cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))
                     for j, col in enumerate(cols):
                         idx = i * cols_per_row + j
                         if idx < num_figs:
                             with col:
-                                # Plot figure and allow click
-                                clicked_cellinfo_fig = plotly_events(
-                                    cellinfo_figure_list[idx], 
+                                clicked_fig_msrd = plotly_events(
+                                    msrd_figure_list[idx], 
                                     click_event=True, 
                                     override_width="100%", 
                                     override_height=400
                                 )
-                            if clicked_cellinfo_fig:
-                                # Get click, if it's the first click of a figure, generate a new element
-                                if idx not in st.session_state["click_dict_cellinfo"].keys():
-                                    st.session_state["click_dict_cellinfo"][idx] = clicked_cellinfo_fig
-                                    # Get the clicked time frame 
-                                    st.session_state["clicked_tf_cellinfo"] = clicked_cellinfo_fig[0]['x']
-                                else:
-                                    # Check if the current click is the same as last click
-                                    if st.session_state["click_dict_cellinfo"][idx] != clicked_cellinfo_fig:
-                                        # Get clicked time frame if the current click is different (it's a real click)
-                                        st.session_state["clicked_tf_cellinfo"] = clicked_cellinfo_fig[0]['x']
-                                        st.session_state["click_dict_cellinfo"][idx] = clicked_cellinfo_fig
-                                    else:
-                                        pass
-                if st.session_state["clicked_tf_cellinfo"] is not None:
-                    handle_click(st.session_state["clicked_tf_cellinfo"], selected_data, selected_key, folder_path, img_path, input_value)
-                                        
-                    z_index_cellinfo = st.slider(
-                        "Select Z slice",
-                        min_value=0,
-                        max_value=input_value//2 - 1,
-                        value= input_value//4,
-                        key="cell_info_slider"
-                    )
-                    if st.session_state.is_mask: 
-                        cell_mask = st.session_state["clicked_mask"][z_index_cellinfo, :, :]
-                        cell_mask_colored = encode_masks_to_rgb(cell_mask, distinct_colormap)
+
+                            if clicked_fig_msrd:
+                                prev_click = st.session_state["click_dict_msrd"].get(idx)
+                                if prev_click != clicked_fig_msrd:
+                                    st.session_state["click_dict_msrd"][idx] = clicked_fig_msrd
+                                    st.session_state["clicked_tf_msrd"] = clicked_fig_msrd[0]['x']
+                                    st.session_state["clicked_neighbor"] = msrd_index_list[idx]
+
+            if st.session_state["clicked_tf_msrd"] is not None:
+                handle_click_msrd(st.session_state["clicked_tf_msrd"], selected_data, selected_key, st.session_state["clicked_neighbor"], folder_path, img_path, input_value)
+                                    
+                z_index_cellinfo = st.slider(
+                    "Select Z slice",
+                    min_value=0,
+                    max_value=st.session_state["clicked_mask_msrd"].shape[0] - 1,
+                    value= input_value//4,
+                    key="cell_neighbor_slider"
+                )
+                if st.session_state.is_mask: 
+                    cell_neighbor_mask = st.session_state["clicked_mask_msrd"][z_index_cellinfo, :, :]
+                    cell_neighbor_mask_colored = encode_masks_to_rgb(cell_neighbor_mask, distinct_colormap)
+                else:
+                    cell_neighbor_img = st.session_state["clicked_image_msrd"][z_index_cellinfo, :, :]
+
+                col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
+                
+                with col1:
+                    if st.button("←", key="prev_button_msrd"):
+                        adjust_clicked_tf_msrd(-1)
+                
+                with col2:
+                    if st.session_state.is_mask:
+                        fig_neighbor_connection = px.imshow(cell_neighbor_mask_colored)
+
+                        fig_neighbor_connection.update_traces(
+                        customdata=cell_neighbor_mask.astype(str),  # Store original values
+                        hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
+                        )
                     else:
-                        cell_img = st.session_state["clicked_image"][z_index_cellinfo, :, :]
-
-                    col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
+                        fig_neighbor_connection = px.imshow(contrast_stretch(cell_neighbor_img), binary_string=True)
                     
-                    with col1:
-                        if st.button("←", key="prev_button"):
-                            adjust_clicked_tf_cellinfo(-1)
-                    with col2:
-                        if st.session_state.is_mask: 
-                            fig_neighbor = px.imshow(
-                                cell_mask_colored,
-                            )
-                            fig_neighbor.update_traces(
-                            customdata=cell_mask.astype(str),  # Store original values
-                            hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
-                            )
-                        else:
-                            fig_neighbor = px.imshow(
-                                contrast_stretch(cell_img),
-                                binary_string=True
-                            )                                        
 
-                        st.plotly_chart(fig_neighbor, key="neighbor_fig")        
-                     
-                    with col3:
-                        if st.button("→", key="next_button"):
-                            adjust_clicked_tf_cellinfo(1)  
-
-            # -------------------------------------------------Show MSRD Information------------------------------------------------------------
-            if "click_dict_msrd" not in st.session_state:
-                st.session_state["click_dict_msrd"] = {}
-
-            with st.expander("Show MSRD information"):
-                if selected_key not in msrd_data:
-                    st.warning(f"No data found in the JSON for cell ID = {selected_key}")
-                    return
-
-                msrd_figure_list = []
-                msrd_index_list = []
-
-                for neighbor_id, dist_list in msrd_data[selected_key].items():
-                    distances = [(d-dist_list[0])**2/25**2 if d is not None else float('nan') for d in dist_list]
-                    msrd_figure_list.append(
-                        create_figure(time_frames, current_time_frame, distances, 
-                                    f"MSRD {selected_key} - {neighbor_id}", 
-                                    f"MSRD {selected_key} - {neighbor_id}")
-                    )
-                    msrd_index_list.append(neighbor_id)
-
-                num_figs = len(msrd_index_list)
-                rows = (num_figs + cols_per_row - 1) // cols_per_row
-
-                # Session state initialization
-                if "clicked_tf_msrd" not in st.session_state:
-                    st.session_state["clicked_tf_msrd"] = None
-                if "clicked_neighbor" not in st.session_state:
-                    st.session_state["clicked_neighbor"] = 0
-                if "click_dict_msrd" not in st.session_state:
-                    st.session_state["click_dict_msrd"] = {}
-
-                # Display each row under a toggle (checkbox)
-                for i in range(rows):
-                    show_row = st.checkbox(f"Show Row {i+1}", value=True)
-                    if show_row:
-                        cols = st.columns(min(cols_per_row, num_figs - i * cols_per_row))
-                        for j, col in enumerate(cols):
-                            idx = i * cols_per_row + j
-                            if idx < num_figs:
-                                with col:
-                                    clicked_fig_msrd = plotly_events(
-                                        msrd_figure_list[idx], 
-                                        click_event=True, 
-                                        override_width="100%", 
-                                        override_height=400
-                                    )
-
-                                if clicked_fig_msrd:
-                                    prev_click = st.session_state["click_dict_msrd"].get(idx)
-                                    if prev_click != clicked_fig_msrd:
-                                        st.session_state["click_dict_msrd"][idx] = clicked_fig_msrd
-                                        st.session_state["clicked_tf_msrd"] = clicked_fig_msrd[0]['x']
-                                        st.session_state["clicked_neighbor"] = msrd_index_list[idx]
-
-                if st.session_state["clicked_tf_msrd"] is not None:
-                    handle_click_msrd(st.session_state["clicked_tf_msrd"], selected_data, selected_key, st.session_state["clicked_neighbor"], folder_path, img_path, input_value)
-                                        
-                    z_index_cellinfo = st.slider(
-                        "Select Z slice",
-                        min_value=0,
-                        max_value=st.session_state["clicked_mask_msrd"].shape[0] - 1,
-                        value= input_value//4,
-                        key="cell_neighbor_slider"
-                    )
-                    if st.session_state.is_mask: 
-                        cell_neighbor_mask = st.session_state["clicked_mask_msrd"][z_index_cellinfo, :, :]
-                        cell_neighbor_mask_colored = encode_masks_to_rgb(cell_neighbor_mask, distinct_colormap)
-                    else:
-                        cell_neighbor_img = st.session_state["clicked_image_msrd"][z_index_cellinfo, :, :]
-
-                    col1, col2, col3 = st.columns([1, 6, 1])  # Create layout for buttons
-                    
-                    with col1:
-                        if st.button("←", key="prev_button_msrd"):
-                            adjust_clicked_tf_msrd(-1)
-                    
-                    with col2:
-                        if st.session_state.is_mask:
-                            fig_neighbor_connection = px.imshow(cell_neighbor_mask_colored)
-
-                            fig_neighbor_connection.update_traces(
-                            customdata=cell_neighbor_mask.astype(str),  # Store original values
-                            hovertemplate="Mask Value: %{customdata}<extra></extra>",  # Display raw mask value
-                            )
-                        else:
-                            fig_neighbor_connection = px.imshow(contrast_stretch(cell_neighbor_img), binary_string=True)
-                        
-
-                        st.plotly_chart(fig_neighbor_connection, key="_msrd_connection_fig")
-                    
-                    with col3:
-                        if st.button("→", key="next_button_msrd"):
-                            adjust_clicked_tf_msrd(1)
+                    st.plotly_chart(fig_neighbor_connection, key="_msrd_connection_fig")
+                
+                with col3:
+                    if st.button("→", key="next_button_msrd"):
+                        adjust_clicked_tf_msrd(1)
 
 
-        else:
-            st.warning("Clicked outside the data range.")
     else:
-        st.info("No click yet.")
+        st.warning("Clicked outside the data range.")
 
 if __name__ == "__main__":
     main()
